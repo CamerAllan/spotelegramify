@@ -219,6 +219,13 @@ def add_track_to_playlist(chat_playlist_id, track_name, track_id):
     logger.info(f"Attempting to add {track_name} to playlist {chat_playlist_id}")
 
     refresh_spotify_access_token()
+
+    # Back out if track is already in playlist
+    existing_tracks = sp.playlist_items(chat_playlist_id)
+    if len([t for t in existing_tracks if t["id"]] == track_id) > 0:
+        logger.warn(f"Playlist {chat_playlist_id} already contains track {track_id}")
+        return
+
     sp.playlist_add_items(chat_playlist_id, [track_id])
 
     logger.info(f"Successfully added {track_name} to playlist {chat_playlist_id}")
