@@ -1,7 +1,7 @@
 <br />
 <div align="center">
   <a href="https://github.com/camerallan/spotelegramify">
-    <img src="./docs/images/logo.png" alt="Logo" width="80" height="80">
+    <img src="./docs/images/icon.png" alt="Logo" width="80" height="80">
   </a>
 
   <h3 align="center">Spotelegramify</h3>
