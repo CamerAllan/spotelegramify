@@ -94,6 +94,11 @@ def set_chat_playlist(update: Update, context):
         update.message.reply_text("Only the admin user can change the playlist ID!")
         return
 
+    if len(context.args) != 1:
+        logger.info(f"Invalid use of set_playlist.")
+        update.message.reply_text(f"Invalid arguments to set_playlist!")
+        return
+
     playlist_id = context.args[0]
 
     # Validate the playlist ID
@@ -101,7 +106,7 @@ def set_chat_playlist(update: Update, context):
     try:
         playlist = sp.playlist(playlist_id)
     except Exception as e:
-        logger.warn(f"Playlist ID '{playlist_id}' is not valid.")
+        logger.info(f"Playlist ID '{playlist_id}' is not valid.")
         update.message.reply_text(f"Playlist ID '{playlist_id}' is not valid!")
         return
 
