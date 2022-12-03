@@ -90,7 +90,7 @@ def set_chat_playlist(update: Update, context):
 
     # Only admin user can update playlist ID
     if str(user_id) != str(SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID):
-        logger.warn(f"User with id {user_id} doesn't match admin user {SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID} !")
+        logger.warning(f"User with id {user_id} doesn't match admin user {SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID} !")
         update.message.reply_text("Only the admin user can change the playlist ID!")
         return
 
@@ -222,8 +222,8 @@ def add_track_to_playlist(chat_playlist_id, track_name, track_id):
 
     # Back out if track is already in playlist
     existing_tracks = sp.playlist_items(chat_playlist_id)["items"]
-    if len([t for t in existing_tracks if t["id"]] == track_id) > 0:
-        logger.warn(f"Playlist {chat_playlist_id} already contains track {track_id}")
+    if len([t for t in existing_tracks if t["track"]["id"] == track_id]) > 0:
+        logger.warning(f"Playlist {chat_playlist_id} already contains track {track_id}")
         return
 
     sp.playlist_add_items(chat_playlist_id, [track_id])
