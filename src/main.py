@@ -19,9 +19,7 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
 
 # Enable logging
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
+logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Get configuration from environment
@@ -29,9 +27,7 @@ SPOTELEGRAMIFY_CLIENT_ID = os.getenv("SPOTELEGRAMIFY_CLIENT_ID")
 SPOTELEGRAMIFY_CLIENT_SECRET = os.getenv("SPOTELEGRAMIFY_CLIENT_SECRET")
 SPOTIFY_REFRESH_TOKEN = os.getenv("SPOTIFY_REFRESH_TOKEN")
 SPOTELEGRAMIFY_TELEGRAM_TOKEN = os.getenv("SPOTELEGRAMIFY_KEY")
-SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID = os.getenv(
-    "SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID"
-)
+SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID = os.getenv("SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID")
 
 # Set up Spotify auth object
 client_credentials_manager = SpotifyClientCredentials(
@@ -72,17 +68,11 @@ def set_playlist(update: Update, context):
     user_id = update.message.from_user["id"]
 
     if str(user_id) != str(SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID):
-        logger.warn(
-            f"User with id {user_id} doesn't match admin user {SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID} !"
-        )
+        logger.warn(f"User with id {user_id} doesn't match admin user {SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID} !")
         update.message.reply_text("Nope!")
         return
 
-    chat_name = (
-        update.message.chat.title
-        if update.message.chat.title is not None
-        else user_name
-    )
+    chat_name = update.message.chat.title if update.message.chat.title is not None else user_name
 
     playlist_id = context.args[0]
     conn = sqlite3.connect("spotelegramify")
@@ -128,7 +118,8 @@ def error(update, context):
 
 
 def find_spotify_track_ids(message):
-    return re.findall(r"https?://.*\.spotify\.com/track/([^\s]+)\?", message)
+    # Track id is alphanumeric 22 chars long
+    return re.findall(r"https?://.*\.spotify\.com/track\/([a-zA-Z0-9]{22})", message)
 
 
 def search_track(track):
@@ -138,7 +129,7 @@ def search_track(track):
 def parse_track_links(update: Update, ctx):
     text = update.message.text
 
-    # TODO: Get tidal tracks too
+    # TODO: Parse tidal tracks too
     spotify_tracks = find_spotify_track_ids(text)
 
     for track_id in spotify_tracks:
@@ -152,10 +143,14 @@ def parse_track_links(update: Update, ctx):
         logging.info(f"Identified track: {track_name} - {track_artist}")
 
         chat_playlist_id = get_playlist(update.message.chat.id)
-        print(chat_playlist_id)
         if chat_playlist_id is None:
-            # TODO Send message asking users to set playlist
             logger.warning("No playlist id set, cannot add to playlist")
+            update.message.reply_text("No playlist configured!")
+            update.message.reply_text("Please set playlist id by sending `set_playlist <id>`")
+            update.message.reply_text("You can find the playlist id by sharing a link to your playlist.")
+            update.message.reply_text("In the following (broken) example, the playlist ID is 28XIcmCYkCabWX3f172AbW:")
+            update.message.reply_text("https://open.spotify.com/playlist/28XIcmCYkCabWX3f172AbW?si=2b1d1d361s284f56")
+            return
 
         add_track_to_playlist(chat_playlist_id, track_name, track_id)
 
@@ -166,20 +161,16 @@ def refresh_spotify_access_token():
     We *should* cache the token and refresh only once expired.
     Let's not bother.
     """
-    spotify_oauth.refresh_access_token(refresh_token=SPOTIFY_REFRESH_TOKEN)[
-        "access_token"
-    ]
+    spotify_oauth.refresh_access_token(refresh_token=SPOTIFY_REFRESH_TOKEN)["access_token"]
 
 
 def add_track_to_playlist(chat_playlist_id, track_name, track_id):
-    logger.info(
-        f"Attempting to add {track_name} to playlist {chat_playlist_id}")
+    logger.info(f"Attempting to add {track_name} to playlist {chat_playlist_id}")
 
     refresh_spotify_access_token()
     sp.playlist_add_items(chat_playlist_id, [track_id])
 
-    logger.info(
-        f"Successfully added {track_name} to playlist {chat_playlist_id}")
+    logger.info(f"Successfully added {track_name} to playlist {chat_playlist_id}")
 
 
 def main():
