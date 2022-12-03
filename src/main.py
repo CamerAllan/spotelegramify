@@ -94,9 +94,9 @@ def set_chat_playlist(update: Update, context):
         update.message.reply_text("Only the admin user can change the playlist ID!")
         return
 
-    if len(context.args) != 1:
+    if len(context.args) < 1:
         logger.info(f"Invalid use of set_playlist.")
-        update.message.reply_text(f"Invalid arguments to set_playlist!")
+        update.message.reply_text(f"Missing playlist ID!")
         return
 
     playlist_id = context.args[0]

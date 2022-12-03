@@ -10,6 +10,8 @@
 
 A telegram bot that grabs music links from chats and adds them to a playlist
 
+**Please note that the spotelegramify_bot account on Telegram is associated with my credentials, and will not work for anyone else.**
+**You can host your own instance and create a separate Telegram bot for it.**
 
 ## Limitations
 
