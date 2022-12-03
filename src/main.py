@@ -97,11 +97,14 @@ def set_chat_playlist(update: Update, context):
     playlist_id = context.args[0]
 
     # Validate the playlist ID
-    playlist_is_valid = validate_playlist_id(playlist_id)
-    if not playlist_is_valid:
+    playlist = sp.playlist(playlist_id)
+    if not playlist:
         logger.warn(f"Playlist ID '{playlist_id}' is not valid.")
         update.message.reply_text(f"Playlist ID '{playlist_id}' is not valid!")
         return
+    else:
+        playlist_name = playlist["name"]
+        update.message.reply_text(f"Songs in this chat will be added to '{playlist_name}'.")
 
     chat_name = update.message.chat.title if update.message.chat.title is not None else user_name
 
@@ -118,7 +121,7 @@ def set_chat_playlist(update: Update, context):
     conn.close()
 
 
-def get_playlist(chat_id):
+def get_playlist_id(chat_id):
     """
     Get the stored playlist associated with the given chat.
     """
@@ -185,7 +188,7 @@ def parse_track_links(update: Update):
         track_artist = track_result["artists"][0]["name"]
         logging.info(f"Identified track: {track_name} - {track_artist}")
 
-        chat_playlist_id = get_playlist(update.message.chat.id)
+        chat_playlist_id = get_playlist_id(update.message.chat.id)
         if chat_playlist_id is None:
             logger.warning("No playlist id set, cannot add to playlist")
             update.message.reply_text("No playlist configured!")
