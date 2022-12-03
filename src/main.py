@@ -66,8 +66,13 @@ configure_db()
 def set_playlist(update: Update, context):
     """Send a message when the command /start is issued."""
     chat_id = update.message.chat.id
-    chat_name = update.message.chat.title if update.message.chat.title is not None else update.message.from_user[
-        "username"]
+    user_name = update.message.from_user["username"]
+
+    if user_name != "CamerAllan":
+        update.message.reply_text('Nope!')
+        return
+
+    chat_name = update.message.chat.title if update.message.chat.title is not None else user_name
 
     playlist_id = context.args[0]
     conn = sqlite3.connect("spotelegramify")
@@ -78,8 +83,6 @@ def set_playlist(update: Update, context):
     """, (chat_id, chat_name, playlist_id))
     conn.commit()
     conn.close()
-
-    print("inserted")
 
 
 def get_playlist(chat_id):
