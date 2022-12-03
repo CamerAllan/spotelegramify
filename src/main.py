@@ -6,16 +6,14 @@ Usage:
 Press Ctrl-C on the command line or send a signal to the process to stop the bot.
 """
 
-# https://dev.to/sabareh/how-to-get-the-spotify-refresh-token-176
-# bless u
-
 import logging
 import os
 import sqlite3
 import re
-from telegram import Update
-from telegram.ext import Filters, MessageHandler, CommandHandler, ContextTypes, Updater
 import spotipy
+
+from telegram import Update
+from telegram.ext import Filters, MessageHandler, CommandHandler, Updater
 from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
 
 # Enable logging
@@ -42,10 +40,19 @@ spotify_oauth = SpotifyOAuth(
 )
 
 
+def refresh_spotify_access_token():
+    """
+    Spotify oAuth2 access tokens only live for 1 hour.
+    We *should* cache the token and refresh only once expired.
+    Let's not bother.
+    """
+    spotify_oauth.refresh_access_token(refresh_token=SPOTIFY_REFRESH_TOKEN)["access_token"]
+    logger.info(f"Refreshed access token")
+
+
 def configure_db():
     """
-    Set up a local database to track the playlist associated with
-    each Telegram chat.
+    Set up a local database to track the playlist associated with each Telegram chat.
     """
     conn = sqlite3.connect("spotelegramify")
     cursor = conn.cursor()
@@ -61,7 +68,7 @@ def configure_db():
     conn.commit()
 
 
-def set_playlist(update: Update, context):
+def set_chat_playlist(update: Update, context):
     """
     To function, the bot needs a playlist to add tracks to.
     If playlist has not been set, the bot should respond with instructions on how to do so.
@@ -97,7 +104,7 @@ def set_playlist(update: Update, context):
 
 def get_playlist(chat_id):
     """
-    Send a message when the command /start is issued.
+    Get the stored playlist associated with the given chat.
     """
     conn = sqlite3.connect("spotelegramify")
     cursor = conn.cursor()
@@ -112,16 +119,7 @@ def get_playlist(chat_id):
     conn.commit()
     conn.close()
 
-    # TODO test playlist id not set
-
     return result[0] if result is not None else None
-
-
-def help(update):
-    """
-    Send a message when the command /help is issued.
-    """
-    update.message.reply_text("Help!")
 
 
 def error(update, context):
@@ -141,11 +139,20 @@ def find_spotify_track_ids(message):
     return re.findall(r"https?://.*\.spotify\.com/track\/([a-zA-Z0-9]{22})", message)
 
 
-def search_track(track):
-    return sp.track(track)
+def search_track(track_id):
+    """
+    Use the track ID to fetch and return the track object.
+    """
+    return sp.track(track_id)
 
 
-def parse_track_links(update: Update, ctx):
+def parse_track_links(update: Update):
+    """
+    This is the main event handler for this bot.
+    It will read all messages in the chat, looking for music links.
+    It will then add these links to a previously configured playlist.
+    """
+
     text = update.message.text
 
     # TODO: Parse tidal tracks too
@@ -154,7 +161,8 @@ def parse_track_links(update: Update, ctx):
     for track_id in spotify_tracks:
         track_result = search_track(track_id)
         if track_result is None:
-            raise RuntimeError("No result for track with id: {track_id}")
+            logging.error(f"No result for track with id: {track_id}")
+            return
 
         track_name = track_result["name"]
 
@@ -174,16 +182,10 @@ def parse_track_links(update: Update, ctx):
         add_track_to_playlist(chat_playlist_id, track_name, track_id)
 
 
-def refresh_spotify_access_token():
-    """
-    Spotify oAuth2 access tokens only live for 1 hour.
-    We *should* cache the token and refresh only once expired.
-    Let's not bother.
-    """
-    spotify_oauth.refresh_access_token(refresh_token=SPOTIFY_REFRESH_TOKEN)["access_token"]
-
-
 def add_track_to_playlist(chat_playlist_id, track_name, track_id):
+    """
+    Add a given track to the given playlist.
+    """
     logger.info(f"Attempting to add {track_name} to playlist {chat_playlist_id}")
 
     refresh_spotify_access_token()
@@ -193,7 +195,9 @@ def add_track_to_playlist(chat_playlist_id, track_name, track_id):
 
 
 def main():
-    """Start the bot."""
+    """
+    Start the bot.
+    """
     # Configure the database
     configure_db()
 
@@ -202,7 +206,7 @@ def main():
     dp = updater.dispatcher
 
     # Set up handlers
-    dp.add_handler(CommandHandler("set_playlist", set_playlist))
+    dp.add_handler(CommandHandler("set_playlist", set_chat_playlist))
     dp.add_handler(CommandHandler("help", help))
     dp.add_handler(MessageHandler(Filters.all, parse_track_links))
     dp.add_error_handler(error)
