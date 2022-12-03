@@ -1,1 +1,1 @@
-npx nodemon src/main.py
+nohup npx nodemon src/main.py > ./output 2>&1 &
