@@ -172,7 +172,7 @@ def search_track(track_id):
     return sp.track(track_id)
 
 
-def parse_track_links(update: Update):
+def parse_track_links(update: Update, _):
     """
     This is the main event handler for this bot.
     It will read all messages in the chat, looking for music links.
