@@ -68,6 +68,13 @@ def configure_db():
     conn.commit()
 
 
+def validate_playlist_id(playlist_id):
+    """
+    Return true if the given playlist ID is valid, else false
+    """
+    return sp.playlist(playlist_id) is not None
+
+
 def set_chat_playlist(update: Update, context):
     """
     To function, the bot needs a playlist to add tracks to.
@@ -81,14 +88,23 @@ def set_chat_playlist(update: Update, context):
     user_name = update.message.from_user["username"]
     user_id = update.message.from_user["id"]
 
+    # Only admin user can update playlist ID
     if str(user_id) != str(SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID):
         logger.warn(f"User with id {user_id} doesn't match admin user {SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID} !")
-        update.message.reply_text("Nope!")
+        update.message.reply_text("Only the admin user can change the playlist ID!")
+        return
+
+    playlist_id = context.args[0]
+
+    # Validate the playlist ID
+    playlist_is_valid = validate_playlist_id(playlist_id)
+    if not playlist_is_valid:
+        logger.warn(f"Playlist ID '{playlist_id}' is not valid.")
+        update.message.reply_text(f"Playlist ID '{playlist_id}' is not valid!")
         return
 
     chat_name = update.message.chat.title if update.message.chat.title is not None else user_name
 
-    playlist_id = context.args[0]
     conn = sqlite3.connect("spotelegramify")
     cursor = conn.cursor()
     cursor.execute(
