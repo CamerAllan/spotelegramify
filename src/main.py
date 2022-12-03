@@ -97,14 +97,16 @@ def set_chat_playlist(update: Update, context):
     playlist_id = context.args[0]
 
     # Validate the playlist ID
-    playlist = sp.playlist(playlist_id)
-    if not playlist:
+    playlist = None
+    try:
+        playlist = sp.playlist(playlist_id)
+    except Exception as e:
         logger.warn(f"Playlist ID '{playlist_id}' is not valid.")
         update.message.reply_text(f"Playlist ID '{playlist_id}' is not valid!")
         return
-    else:
-        playlist_name = playlist["name"]
-        update.message.reply_text(f"Songs in this chat will be added to '{playlist_name}'.")
+
+    playlist_name = playlist["name"]
+    update.message.reply_text(f"Songs in this chat will be added to '{playlist_name}'.")
 
     chat_name = update.message.chat.title if update.message.chat.title is not None else user_name
 
