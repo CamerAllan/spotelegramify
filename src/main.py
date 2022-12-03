@@ -62,7 +62,14 @@ def configure_db():
 
 
 def set_playlist(update: Update, context):
-    """Send a message when the command /start is issued."""
+    """
+    To function, the bot needs a playlist to add tracks to.
+    If playlist has not been set, the bot should respond with instructions on how to do so.
+
+    To set the playlist, users use the set_playlist command, which calls this function.
+    This function takes the playlist ID provided by the user and stores it locally,
+    so that future messages in the chat can be associated with the playlist.
+    """
     chat_id = update.message.chat.id
     user_name = update.message.from_user["username"]
     user_id = update.message.from_user["id"]
@@ -89,13 +96,16 @@ def set_playlist(update: Update, context):
 
 
 def get_playlist(chat_id):
-    """Send a message when the command /start is issued."""
+    """
+    Send a message when the command /start is issued.
+    """
     conn = sqlite3.connect("spotelegramify")
     cursor = conn.cursor()
     cursor.execute(
         f"""
-        SELECT playlist_id FROM chats WHERE chat_id = '{chat_id}'
-    """
+        SELECT playlist_id FROM chats WHERE chat_id = ?
+    """,
+        (chat_id,),
     )
 
     result = cursor.fetchone()
@@ -107,17 +117,26 @@ def get_playlist(chat_id):
     return result[0] if result is not None else None
 
 
-def help(update, context):
-    """Send a message when the command /help is issued."""
+def help(update):
+    """
+    Send a message when the command /help is issued.
+    """
     update.message.reply_text("Help!")
 
 
 def error(update, context):
-    """Log Errors caused by Updates."""
+    """
+    Log Errors caused by Updates.
+    """
     logger.warning('Update "%s" caused error "%s"', update, context.error)
 
 
 def find_spotify_track_ids(message):
+    """
+    Parse the message for spotify track IDs.
+    This is brittle, and will break one day.
+    That's ok.
+    """
     # Track id is alphanumeric 22 chars long
     return re.findall(r"https?://.*\.spotify\.com/track\/([a-zA-Z0-9]{22})", message)
 
