@@ -18,52 +18,51 @@ from telegram.ext import Filters, MessageHandler, CommandHandler, ContextTypes, 
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
 
+# Enable logging
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# Get configuration from environment
 SPOTELEGRAMIFY_CLIENT_ID = os.getenv("SPOTELEGRAMIFY_CLIENT_ID")
 SPOTELEGRAMIFY_CLIENT_SECRET = os.getenv("SPOTELEGRAMIFY_CLIENT_SECRET")
 SPOTIFY_REFRESH_TOKEN = os.getenv("SPOTIFY_REFRESH_TOKEN")
 SPOTELEGRAMIFY_TELEGRAM_TOKEN = os.getenv("SPOTELEGRAMIFY_KEY")
-# Can get this from userinfobot
 SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID = os.getenv(
-    "SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID")
+    "SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID"
+)
 
-# TODO refresh credentials now and then
+# Set up Spotify auth object
 client_credentials_manager = SpotifyClientCredentials(
-    client_id=SPOTELEGRAMIFY_CLIENT_ID, client_secret=SPOTELEGRAMIFY_CLIENT_SECRET)
+    client_id=SPOTELEGRAMIFY_CLIENT_ID, client_secret=SPOTELEGRAMIFY_CLIENT_SECRET
+)
 sp = spotipy.Spotify(client_credentials_manager=client_credentials_manager)
-spotify_oauth = SpotifyOAuth(client_id=SPOTELEGRAMIFY_CLIENT_ID,
-                             client_secret=SPOTELEGRAMIFY_CLIENT_SECRET,
-                             scope="playlist-modify-private,playlist-modify-public",
-                             redirect_uri="https://localhost:8888")
-
-# Enable logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    level=logging.INFO)
-
-logger = logging.getLogger(__name__)
+spotify_oauth = SpotifyOAuth(
+    client_id=SPOTELEGRAMIFY_CLIENT_ID,
+    client_secret=SPOTELEGRAMIFY_CLIENT_SECRET,
+    scope="playlist-modify-private,playlist-modify-public",
+    redirect_uri="https://localhost:8888",
+)
 
 
 def configure_db():
-
-    # Connect to the database
+    """
+    Set up a local database to track the playlist associated with
+    each Telegram chat.
+    """
     conn = sqlite3.connect("spotelegramify")
-
-    # Create a cursor object
     cursor = conn.cursor()
-
-    # Create the `chats` table if it does not already exist
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS chats (
             chat_id TEXT PRIMARY KEY,
             chat_name TEXT,
             playlist_id TEXT
         )
-    """)
-
-    # Save the changes
+    """
+    )
     conn.commit()
-
-
-configure_db()
 
 
 def set_playlist(update: Update, context):
@@ -74,19 +73,27 @@ def set_playlist(update: Update, context):
 
     if str(user_id) != str(SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID):
         logger.warn(
-            f"User with id {user_id} doesn't match admin user {SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID} !")
-        update.message.reply_text('Nope!')
+            f"User with id {user_id} doesn't match admin user {SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID} !"
+        )
+        update.message.reply_text("Nope!")
         return
 
-    chat_name = update.message.chat.title if update.message.chat.title is not None else user_name
+    chat_name = (
+        update.message.chat.title
+        if update.message.chat.title is not None
+        else user_name
+    )
 
     playlist_id = context.args[0]
     conn = sqlite3.connect("spotelegramify")
     cursor = conn.cursor()
-    cursor.execute("""
+    cursor.execute(
+        """
         INSERT OR REPLACE INTO chats (chat_id, chat_name, playlist_id)
         VALUES (?, ?, ?)
-    """, (chat_id, chat_name, playlist_id))
+    """,
+        (chat_id, chat_name, playlist_id),
+    )
     conn.commit()
     conn.close()
 
@@ -95,9 +102,11 @@ def get_playlist(chat_id):
     """Send a message when the command /start is issued."""
     conn = sqlite3.connect("spotelegramify")
     cursor = conn.cursor()
-    cursor.execute(f"""
+    cursor.execute(
+        f"""
         SELECT playlist_id FROM chats WHERE chat_id = '{chat_id}'
-    """)
+    """
+    )
 
     result = cursor.fetchone()
     conn.commit()
@@ -110,7 +119,7 @@ def get_playlist(chat_id):
 
 def help(update, context):
     """Send a message when the command /help is issued."""
-    update.message.reply_text('Help!')
+    update.message.reply_text("Help!")
 
 
 def error(update, context):
@@ -119,7 +128,7 @@ def error(update, context):
 
 
 def find_spotify_track_ids(message):
-    return re.findall(r'https?://.*\.spotify\.com/track/([^\s]+)\?', message)
+    return re.findall(r"https?://.*\.spotify\.com/track/([^\s]+)\?", message)
 
 
 def search_track(track):
@@ -127,7 +136,7 @@ def search_track(track):
 
 
 def parse_track_links(update: Update, ctx):
-    text = (update.message.text)
+    text = update.message.text
 
     # TODO: Get tidal tracks too
     spotify_tracks = find_spotify_track_ids(text)
@@ -151,46 +160,47 @@ def parse_track_links(update: Update, ctx):
         add_track_to_playlist(chat_playlist_id, track_name, track_id)
 
 
+def refresh_spotify_access_token():
+    """
+    Spotify oAuth2 access tokens only live for 1 hour.
+    We *should* cache the token and refresh only once expired.
+    Let's not bother.
+    """
+    spotify_oauth.refresh_access_token(refresh_token=SPOTIFY_REFRESH_TOKEN)[
+        "access_token"
+    ]
+
+
 def add_track_to_playlist(chat_playlist_id, track_name, track_id):
     logger.info(
         f"Attempting to add {track_name} to playlist {chat_playlist_id}")
-    spotify_oauth.refresh_access_token(
-        refresh_token=SPOTIFY_REFRESH_TOKEN)["access_token"]
+
+    refresh_spotify_access_token()
     sp.playlist_add_items(chat_playlist_id, [track_id])
+
     logger.info(
         f"Successfully added {track_name} to playlist {chat_playlist_id}")
 
 
 def main():
     """Start the bot."""
-
     # Configure the database
     configure_db()
 
-    # Create the Updater and pass it your bot's token.
+    # Set up the bot
     updater = Updater(token=SPOTELEGRAMIFY_TELEGRAM_TOKEN, use_context=True)
-
-    # Get the dispatcher to register handlers
     dp = updater.dispatcher
 
-    # on different commands - answer in Telegram
+    # Set up handlers
     dp.add_handler(CommandHandler("set_playlist", set_playlist))
     dp.add_handler(CommandHandler("help", help))
-
-    # Handle all messages in the chat
     dp.add_handler(MessageHandler(Filters.all, parse_track_links))
-
-    # log all errors
     dp.add_error_handler(error)
 
-    # Start the Bot
+    # Start the dang thing
     updater.start_polling()
-
-    # Run the bot until you press Ctrl-C or the process receives SIGINT,
-    # SIGTERM or SIGABRT. This should be used most of the time, since
-    # start_polling() is non-blocking and will stop the bot gracefully.
     updater.idle()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
