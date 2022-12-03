@@ -22,6 +22,9 @@ SPOTELEGRAMIFY_CLIENT_ID = os.getenv("SPOTELEGRAMIFY_CLIENT_ID")
 SPOTELEGRAMIFY_CLIENT_SECRET = os.getenv("SPOTELEGRAMIFY_CLIENT_SECRET")
 SPOTIFY_REFRESH_TOKEN = os.getenv("SPOTIFY_REFRESH_TOKEN")
 SPOTELEGRAMIFY_TELEGRAM_TOKEN = os.getenv("SPOTELEGRAMIFY_KEY")
+# Can get this from userinfobot
+SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID = os.getenv(
+    "SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID")
 
 # TODO refresh credentials now and then
 client_credentials_manager = SpotifyClientCredentials(
@@ -67,8 +70,9 @@ def set_playlist(update: Update, context):
     """Send a message when the command /start is issued."""
     chat_id = update.message.chat.id
     user_name = update.message.from_user["username"]
+    user_id = update.message.from_user["id"]
 
-    if user_name != "CamerAllan":
+    if user_id != SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID:
         update.message.reply_text('Nope!')
         return
 
@@ -120,11 +124,10 @@ def search_track(track):
     return sp.track(track)
 
 
-def handle_messages(update: Update, ctx):
+def parse_track_links(update: Update, ctx):
     text = (update.message.text)
-    print(text)
 
-    # TODO: Get tidal tracks
+    # TODO: Get tidal tracks too
     spotify_tracks = find_spotify_track_ids(text)
 
     for track_id in spotify_tracks:
@@ -134,7 +137,6 @@ def handle_messages(update: Update, ctx):
 
         track_name = track_result["name"]
 
-        # TODO: get all artists on track, not just first
         track_artist = track_result["artists"][0]["name"]
         logging.info(f"Identified track: {track_name} - {track_artist}")
 
@@ -144,12 +146,17 @@ def handle_messages(update: Update, ctx):
             # TODO Send message asking users to set playlist
             logger.warning("No playlist id set, cannot add to playlist")
 
-        print(f"track: {track_id}")
-        print(f"playlist: {chat_playlist_id}")
-        spotify_oauth.refresh_access_token(
-            refresh_token=SPOTIFY_REFRESH_TOKEN)["access_token"]
-        sp.playlist_add_items(chat_playlist_id, [track_id])
-        logger.info(f"Added {track_name} to playlist {chat_playlist_id}")
+        add_track_to_playlist(chat_playlist_id, track_name, track_id)
+
+
+def add_track_to_playlist(chat_playlist_id, track_name, track_id):
+    logger.info(
+        f"Attempting to add {track_name} to playlist {chat_playlist_id}")
+    spotify_oauth.refresh_access_token(
+        refresh_token=SPOTIFY_REFRESH_TOKEN)["access_token"]
+    sp.playlist_add_items(chat_playlist_id, [track_id])
+    logger.info(
+        f"Successfully added {track_name} to playlist {chat_playlist_id}")
 
 
 def main():
@@ -168,8 +175,8 @@ def main():
     dp.add_handler(CommandHandler("set_playlist", set_playlist))
     dp.add_handler(CommandHandler("help", help))
 
-    # on noncommand i.e message - echo the message on Telegram
-    dp.add_handler(MessageHandler(Filters.all, handle_messages))
+    # Handle all messages in the chat
+    dp.add_handler(MessageHandler(Filters.all, parse_track_links))
 
     # log all errors
     dp.add_error_handler(error)
