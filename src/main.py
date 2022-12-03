@@ -73,6 +73,8 @@ def set_playlist(update: Update, context):
     user_id = update.message.from_user["id"]
 
     if user_id != SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID:
+        logger.warn(
+            f"User with id {user_id} doesn't match admin user {SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID} !")
         update.message.reply_text('Nope!')
         return
 
