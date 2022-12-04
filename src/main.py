@@ -11,6 +11,8 @@ import os
 import sqlite3
 import re
 import spotipy
+import tidalapi
+import urllib.parse
 
 from telegram import Update
 from telegram.ext import Filters, MessageHandler, CommandHandler, Updater
@@ -26,6 +28,8 @@ SPOTELEGRAMIFY_CLIENT_SECRET = os.getenv("SPOTELEGRAMIFY_CLIENT_SECRET")
 SPOTIFY_REFRESH_TOKEN = os.getenv("SPOTIFY_REFRESH_TOKEN")
 SPOTELEGRAMIFY_TELEGRAM_TOKEN = os.getenv("SPOTELEGRAMIFY_KEY")
 SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID = os.getenv("SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID")
+TIDAL_ACCESS_TOKEN = os.getenv("TIDAL_ACCESS_TOKEN")
+TIDAL_REFRESH_TOKEN = os.getenv("TIDAL_REFRESH_TOKEN")
 
 # Set up Spotify auth object
 client_credentials_manager = SpotifyClientCredentials(
@@ -38,6 +42,11 @@ spotify_oauth = SpotifyOAuth(
     scope="playlist-modify-private,playlist-modify-public",
     redirect_uri="https://localhost:8888",
 )
+
+# Set up tidal auth
+tidal_session = tidalapi.Session()
+# Access token can be stale but needs to have been valid
+tidal_session.load_oauth_session("Bearer", TIDAL_ACCESS_TOKEN, TIDAL_REFRESH_TOKEN)
 
 
 def refresh_spotify_access_token():
@@ -166,14 +175,63 @@ def find_spotify_track_ids(message):
     That's ok.
     """
     # Track id is alphanumeric 22 chars long
-    return re.findall(r"https?://.*\.spotify\.com/track\/([a-zA-Z0-9]{22})", message)
+    return re.findall(r"spotify\.com/track/([a-zA-Z0-9]{22})", message)
 
 
-def search_track(track_id):
+def find_tidal_track_ids(message):
+    """
+    Parse the message for tidal track IDs.
+    This is brittle, and will probably break one day.
+    That's ok.
+    """
+    # Track id is alphanumeric 22 chars long
+    return re.findall(r"tidal\.com/track/(\d+)/?[^\?]*", message)
+
+
+def spotify_track_id_lookup(track_id):
     """
     Use the track ID to fetch and return the track object.
     """
     return sp.track(track_id)
+
+
+def tidal_track_id_lookup(track_id):
+    """
+    Use the track ID to fetch and return the Tidal track object.
+    Then do a Spotify search for the track, and return the result.
+    """
+
+    tidal_track = tidal_session.track(track_id)
+
+    tidal_track_artist = tidal_track.artist.name
+    tidal_track_name = tidal_track.name
+
+    logger.info(f"Looking up tidal track {tidal_track_name} - {tidal_track_artist} on Spotify")
+
+    # Perform the search
+    query = urllib.parse.quote(f"track:{tidal_track_name} artist:{tidal_track_artist}".encode("utf8"))
+    spotify_results = sp.search(query, type="track")
+    spotify_track_results = spotify_results["tracks"]
+
+    # Validate results
+    if spotify_track_results is None:
+        logger.warning(f"Could not find tidal track {tidal_track_name} - {tidal_track_artist} on Spotify")
+        return None
+
+    if spotify_track_results["total"] < 1:
+        logger.error(f"Spotify returned empty tracks result for {tidal_track_name} - {tidal_track_artist}!")
+        return None
+
+    # Return the top search result
+    spotify_track_result = spotify_track_results["items"][0]
+    spotify_track_artist = spotify_track_result["artists"][0]["name"]
+    spotify_track_name = spotify_track_result["name"]
+    logger.info(
+        f"Successful lookup! Tidal: {tidal_track_name} - {tidal_track_artist} "
+        f"matched Spotify: {spotify_track_name} - {spotify_track_artist}"
+    )
+
+    return spotify_track_result
 
 
 def parse_track_links(update: Update, _):
@@ -185,18 +243,21 @@ def parse_track_links(update: Update, _):
 
     text = update.message.text
 
-    # TODO: Parse tidal tracks too
-    spotify_tracks = find_spotify_track_ids(text)
+    spotify_track_ids = find_spotify_track_ids(text)
+    tidal_track_ids = find_tidal_track_ids(text)
 
-    for track_id in spotify_tracks:
-        track_result = search_track(track_id)
-        if track_result is None:
-            logging.error(f"No result for track with id: {track_id}")
-            return
+    # Build a list of Spotify track objects from the Spotify and Tidal track IDs
+    all_spotify_tracks = [spotify_track_id_lookup(track) for track in spotify_track_ids] + [
+        tidal_track_id_lookup(track) for track in tidal_track_ids
+    ]
 
-        track_name = track_result["name"]
+    for track in all_spotify_tracks:
+        if track is None:
+            continue
 
-        track_artist = track_result["artists"][0]["name"]
+        track_name = track["name"]
+
+        track_artist = track["artists"][0]["name"]
         logging.info(f"Identified track: {track_name} - {track_artist}")
 
         chat_playlist_id = get_playlist_id(update.message.chat.id)
@@ -209,21 +270,22 @@ def parse_track_links(update: Update, _):
             update.message.reply_text("https://open.spotify.com/playlist/28XIcmCYkCabWX3f172AbW?si=2b1d1d361s284f56")
             return
 
-        add_track_to_playlist(chat_playlist_id, track_name, track_id)
+        add_track_to_playlist(chat_playlist_id, track_name, track)
 
 
-def add_track_to_playlist(chat_playlist_id, track_name, track_id):
+def add_track_to_playlist(chat_playlist_id, track_name, track):
     """
     Add a given track to the given playlist.
     """
     logger.info(f"Attempting to add {track_name} to playlist {chat_playlist_id}")
 
+    track_id = track["id"]
     refresh_spotify_access_token()
 
     # Back out if track is already in playlist
     existing_tracks = sp.playlist_items(chat_playlist_id)["items"]
     if len([t for t in existing_tracks if t["track"]["id"] == track_id]) > 0:
-        logger.warning(f"Playlist {chat_playlist_id} already contains track {track_id}")
+        logger.warning(f"Playlist {chat_playlist_id} already contains track {track}")
         return
 
     sp.playlist_add_items(chat_playlist_id, [track_id])
