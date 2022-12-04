@@ -285,7 +285,7 @@ def add_track_to_playlist(chat_playlist_id, track_name, track):
     # Back out if track is already in playlist
     existing_tracks = sp.playlist_items(chat_playlist_id)["items"]
     if len([t for t in existing_tracks if t["track"]["id"] == track_id]) > 0:
-        logger.warning(f"Playlist {chat_playlist_id} already contains track {track}")
+        logger.warning(f"Playlist {chat_playlist_id} already contains track {track_name}")
         return
 
     sp.playlist_add_items(chat_playlist_id, [track_id])
