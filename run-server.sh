@@ -1,2 +1,2 @@
 pip install -r requirements.txt
-nohup npx nodemon src/main.py > ./output 2>&1 &
+nohup npx nodemon src/main.py prod > ./output 2>&1 &
