@@ -13,6 +13,7 @@ import re
 import spotipy
 import tidalapi
 import urllib.parse
+import sys
 
 from telegram import Update
 from telegram.ext import Filters, MessageHandler, CommandHandler, Updater
@@ -26,7 +27,11 @@ logger = logging.getLogger(__name__)
 SPOTELEGRAMIFY_CLIENT_ID = os.getenv("SPOTELEGRAMIFY_CLIENT_ID")
 SPOTELEGRAMIFY_CLIENT_SECRET = os.getenv("SPOTELEGRAMIFY_CLIENT_SECRET")
 SPOTIFY_REFRESH_TOKEN = os.getenv("SPOTIFY_REFRESH_TOKEN")
-SPOTELEGRAMIFY_TELEGRAM_TOKEN = os.getenv("SPOTELEGRAMIFY_KEY")
+# TODO Sort this bollocks out
+SPOTELEGRAMIFY_TELEGRAM_TOKEN = (
+    os.getenv("SPOTELEGRAMIFY_KEY") if sys.argv[1] != "test" else os.getenv("SPOTELEGRAMIFY_TEST_KEY")
+)
+
 SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID = os.getenv("SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID")
 TIDAL_ACCESS_TOKEN = os.getenv("TIDAL_ACCESS_TOKEN")
 TIDAL_REFRESH_TOKEN = os.getenv("TIDAL_REFRESH_TOKEN")
@@ -49,14 +54,20 @@ tidal_session = tidalapi.Session()
 tidal_session.load_oauth_session("Bearer", TIDAL_ACCESS_TOKEN, TIDAL_REFRESH_TOKEN)
 
 
+def refresh_tidal_access_token():
+    """
+    Refresh the tidal access token
+    """
+    tidal_session.load_oauth_session("Bearer", TIDAL_ACCESS_TOKEN, TIDAL_REFRESH_TOKEN)
+    logger.info(f"Refreshed Tidal access token")
+
+
 def refresh_spotify_access_token():
     """
-    Spotify oAuth2 access tokens only live for 1 hour.
-    We *should* cache the token and refresh only once expired.
-    Let's not bother.
+    Refresh the spotify access token
     """
     spotify_oauth.refresh_access_token(refresh_token=SPOTIFY_REFRESH_TOKEN)["access_token"]
-    logger.info(f"Refreshed access token")
+    logger.info(f"Refreshed Spotify access token")
 
 
 def configure_db():
@@ -69,8 +80,8 @@ def configure_db():
         """
         CREATE TABLE IF NOT EXISTS chats (
             chat_id TEXT PRIMARY KEY,
-            chat_name TEXT,
-            playlist_id TEXT
+            spotify_playlist_id TEXT,
+            tidal_playlist_id TEXT
         )
     """
     )
@@ -84,7 +95,7 @@ def validate_playlist_id(playlist_id):
     return sp.playlist(playlist_id) is not None
 
 
-def set_chat_playlist(update: Update, context):
+def set_chat_spotify_playlist(update: Update, context):
     """
     To function, the bot needs a playlist to add tracks to.
     If playlist has not been set, the bot should respond with instructions on how to do so.
@@ -93,9 +104,11 @@ def set_chat_playlist(update: Update, context):
     This function takes the playlist ID provided by the user and stores it locally,
     so that future messages in the chat can be associated with the playlist.
     """
+
     chat_id = update.message.chat.id
     user_name = update.message.from_user["username"]
     user_id = update.message.from_user["id"]
+    chat_name = update.message.chat.title if update.message.chat.title is not None else user_name
 
     # Only admin user can update playlist ID
     if str(user_id) != str(SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID):
@@ -122,26 +135,85 @@ def set_chat_playlist(update: Update, context):
     playlist_name = playlist["name"]
     playlist_link = playlist["external_urls"]["spotify"]
 
+    logging.info(f"Setting Spotify playlist to {playlist_name} in chat {chat_name}")
     update.message.reply_text(
-        f"Songs in this chat will be added to '{playlist_name}'.\nLink to playlist: {playlist_link}"
+        f"Songs in this chat will be added to Spotify playlist '{playlist_name}'.\nLink to playlist: {playlist_link}"
     )
-
-    chat_name = update.message.chat.title if update.message.chat.title is not None else user_name
 
     conn = sqlite3.connect("spotelegramify")
     cursor = conn.cursor()
     cursor.execute(
         """
-        INSERT OR REPLACE INTO chats (chat_id, chat_name, playlist_id)
-        VALUES (?, ?, ?)
-    """,
-        (chat_id, chat_name, playlist_id),
+        UPDATE chats 
+        SET spotify_playlist_id = ?
+        WHERE chat_id = ?
+        """,
+        (playlist_id, chat_id),
     )
     conn.commit()
     conn.close()
 
 
-def get_playlist_id(chat_id):
+def set_chat_tidal_playlist(update: Update, context):
+    """
+    To function, the bot needs a playlist to add tracks to.
+    If playlist has not been set, the bot should respond with instructions on how to do so.
+
+    To set the playlist, users use the set_playlist command, which calls this function.
+    This function takes the playlist ID provided by the user and stores it locally,
+    so that future messages in the chat can be associated with the playlist.
+    """
+    chat_id = update.message.chat.id
+    user_name = update.message.from_user["username"]
+    user_id = update.message.from_user["id"]
+    chat_name = update.message.chat.title if update.message.chat.title is not None else user_name
+
+    # Only admin user can update playlist ID
+    if str(user_id) != str(SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID):
+        logger.warning(f"User with id {user_id} doesn't match admin user {SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID} !")
+        update.message.reply_text("Only the admin user can change the playlist ID!")
+        return
+
+    if len(context.args) < 1:
+        logger.info(f"Invalid use of set_playlist.")
+        update.message.reply_text(f"Missing playlist ID!")
+        return
+
+    playlist_id = context.args[0]
+
+    # Validate the playlist ID
+    playlist = None
+    try:
+        # TODO verify exception
+        playlist = tidalapi.playlist.Playlist(tidal_session, playlist_id)
+    except Exception:
+        logger.info(f"Playlist ID '{playlist_id}' is not valid.")
+        update.message.reply_text(f"Playlist ID '{playlist_id}' is not valid!")
+        return
+
+    playlist_name = playlist.name
+    playlist_link = f"https://tidal.com/playlist/{playlist_id}"
+
+    logging.info(f"Setting Tidal playlist to {playlist_name} in chat {chat_name}")
+    update.message.reply_text(
+        f"Songs in this chat will be added to Tidal playlist '{playlist_name}'.\nLink to playlist: {playlist_link}"
+    )
+
+    conn = sqlite3.connect("spotelegramify")
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE chats 
+        SET tidal_playlist_id = ?
+        WHERE chat_id = ?
+        """,
+        (playlist_id, chat_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_spotify_playlist_id(chat_id):
     """
     Get the stored playlist associated with the given chat.
     """
@@ -149,8 +221,28 @@ def get_playlist_id(chat_id):
     cursor = conn.cursor()
     cursor.execute(
         f"""
-        SELECT playlist_id FROM chats WHERE chat_id = ?
-    """,
+        SELECT spotify_playlist_id FROM chats WHERE chat_id = ?
+        """,
+        (chat_id,),
+    )
+
+    result = cursor.fetchone()
+    conn.commit()
+    conn.close()
+
+    return result[0] if result is not None else None
+
+
+def get_tidal_playlist_id(chat_id):
+    """
+    Get the stored playlist associated with the given chat.
+    """
+    conn = sqlite3.connect("spotelegramify")
+    cursor = conn.cursor()
+    cursor.execute(
+        f"""
+        SELECT tidal_playlist_id FROM chats WHERE chat_id = ?
+        """,
         (chat_id,),
     )
 
@@ -185,12 +277,12 @@ def find_tidal_track_ids(message):
     That's ok.
     """
     # Track id is alphanumeric 22 chars long
-    return re.findall(r"tidal\.com/track/(\d+)/?[^\?]*", message)
+    return re.findall(r"tidal\.com/.*/track/(\d+)/?[^\?]*", message)
 
 
 def spotify_track_id_lookup(track_id):
     """
-    Use the track ID to fetch and return the track object.
+    Use the track ID to fetch and return the Spotify track object.
     """
     return sp.track(track_id)
 
@@ -198,11 +290,12 @@ def spotify_track_id_lookup(track_id):
 def tidal_track_id_lookup(track_id):
     """
     Use the track ID to fetch and return the Tidal track object.
-    Then do a Spotify search for the track, and return the result.
     """
 
-    tidal_track = tidal_session.track(track_id)
+    return tidal_session.track(track_id)
 
+
+def convert_tidal_track_to_spotify(tidal_track):
     tidal_track_artist = tidal_track.artist.name
     tidal_track_name = tidal_track.name
 
@@ -234,6 +327,35 @@ def tidal_track_id_lookup(track_id):
     return spotify_track_result
 
 
+def convert_spotify_track_to_tidal(spotify_track):
+    tidal_track_artist = spotify_track["artists"][0]["name"]
+    tidal_track_name = spotify_track["name"]
+
+    logger.info(f"Looking up Spotify track {tidal_track_name} - {tidal_track_artist} on Tidal")
+
+    # Perform the search
+    # query = urllib.parse.quote(f"track:{spotify_track_name} artist:{spotify_track_artist}".encode("utf8"))
+    query = f"{tidal_track_name} {tidal_track_artist}"
+    tidal_results = tidal_session.search(query, models=[tidalapi.Track])
+
+    tidal_track_result = tidal_results["top_hit"]
+
+    # Validate results
+    if tidal_track_result is None:
+        logger.warning(f"Could not find Spotify track {tidal_track_name} - {tidal_track_artist} on Tidal")
+        return None
+
+    # Return the top search result
+    tidal_track_artist = tidal_track_result.artist.name
+    tidal_track_name = tidal_track_result.name
+    logger.info(
+        f"Successful lookup! Tidal: {tidal_track_name} - {tidal_track_artist} "
+        f"matched Spotify: {tidal_track_name} - {tidal_track_artist}"
+    )
+
+    return tidal_track_result
+
+
 def parse_track_links(update: Update, _):
     """
     This is the main event handler for this bot.
@@ -246,10 +368,17 @@ def parse_track_links(update: Update, _):
     spotify_track_ids = find_spotify_track_ids(text)
     tidal_track_ids = find_tidal_track_ids(text)
 
-    # Build a list of Spotify track objects from the Spotify and Tidal track IDs
-    all_spotify_tracks = [spotify_track_id_lookup(track) for track in spotify_track_ids] + [
-        tidal_track_id_lookup(track) for track in tidal_track_ids
+    message_spotify_tracks = [spotify_track_id_lookup(track) for track in spotify_track_ids]
+    message_tidal_tracks = [tidal_track_id_lookup(track) for track in tidal_track_ids]
+
+    all_spotify_tracks = message_spotify_tracks + [
+        convert_tidal_track_to_spotify(track) for track in message_tidal_tracks
     ]
+    all_tidal_tracks = message_tidal_tracks + [
+        convert_spotify_track_to_tidal(track) for track in message_spotify_tracks
+    ]
+
+    added_to_any = False
 
     for track in all_spotify_tracks:
         if track is None:
@@ -257,40 +386,105 @@ def parse_track_links(update: Update, _):
 
         track_name = track["name"]
 
-        track_artist = track["artists"][0]["name"]
-        logging.info(f"Identified track: {track_name} - {track_artist}")
-
-        chat_playlist_id = get_playlist_id(update.message.chat.id)
-        if chat_playlist_id is None:
-            logger.warning("No playlist id set, cannot add to playlist")
-            update.message.reply_text("No playlist configured!")
-            update.message.reply_text("Please set playlist id by sending `set_playlist <id>`")
-            update.message.reply_text("You can find the playlist id by sharing a link to your playlist.")
-            update.message.reply_text("In the following (broken) example, the playlist ID is 28XIcmCYkCabWX3f172AbW:")
-            update.message.reply_text("https://open.spotify.com/playlist/28XIcmCYkCabWX3f172AbW?si=2b1d1d361s284f56")
+        chat_tidal_playlist_id = get_spotify_playlist_id(update.message.chat.id)
+        if chat_tidal_playlist_id is None:
+            logger.info(f"No Spotify playlist id set, cannot add {track_name} to Spotify playlist")
             return
 
-        add_track_to_playlist(chat_playlist_id, track_name, track)
+        added_to_any = added_to_any or add_track_to_spotify_playlist(update, chat_tidal_playlist_id, track_name, track)
+
+    for track in all_tidal_tracks:
+        if track is None:
+            continue
+
+        track_name = track.name
+
+        chat_tidal_playlist_id = get_tidal_playlist_id(update.message.chat.id)
+        if chat_tidal_playlist_id is None:
+            logger.info(f"No Tidal playlist id set, cannot add {track_name} to Tidal playlist")
+            return
+
+        added_to_any = added_to_any or add_track_to_tidal_playlist(update, chat_tidal_playlist_id, track_name, track)
+
+    if not added_to_any:
+        update.message.reply_text(f"No Spotify or Tidal playlist has been configured for this chat!")
+        update.message.reply_text(f"You can set this up by running one of the following:")
+        update.message.reply_text(f"/set_spotify_playlist <spotify-playlist-id>")
+        update.message.reply_text(f"/set_tidal_playlist <tidal-playlist-id>")
 
 
-def add_track_to_playlist(chat_playlist_id, track_name, track):
+def add_track_to_spotify_playlist(update, chat_playlist_id, track_name, track):
     """
-    Add a given track to the given playlist.
+    Add a given track to the given Spotify playlist.
     """
-    logger.info(f"Attempting to add {track_name} to playlist {chat_playlist_id}")
 
     track_id = track["id"]
     refresh_spotify_access_token()
 
     # Back out if track is already in playlist
-    existing_tracks = sp.playlist_items(chat_playlist_id)["items"]
+    spotify_playlist = sp.playlist(chat_playlist_id)
+    playlist_name = spotify_playlist["name"]
+
+    logger.info(f"Attempting to add '{track_name}' to Spotify playlist '{playlist_name}'")
+
+    spotify_playlist_items = sp.playlist_items(chat_playlist_id)
+    existing_tracks = spotify_playlist_items["items"]
     if len([t for t in existing_tracks if t["track"]["id"] == track_id]) > 0:
-        logger.warning(f"Playlist {chat_playlist_id} already contains track {track_name}")
+        logger.info(f"Spotify playlist '{playlist_name}' already contains track '{track_name}'")
+        update.message.reply_text(f"That song is already in the Spotify playlist {playlist_name}!")
         return
 
     sp.playlist_add_items(chat_playlist_id, [track_id])
 
-    logger.info(f"Successfully added {track_name} to playlist {chat_playlist_id}")
+    logger.info(f"Successfully added {track_name} to Spotify playlist '{playlist_name}'")
+
+    return True
+
+
+def add_track_to_tidal_playlist(update, chat_playlist_id, track_name, track):
+    """
+    Add a given track to the given Tidal playlist.
+    """
+
+    track_id = track.id
+    refresh_tidal_access_token()
+
+    tidal_playlist = tidal_session.playlist(chat_playlist_id)
+    playlist_name = tidal_playlist.name
+
+    logger.info(f"Attempting to add '{track_name}' to Tidal playlist '{playlist_name}'")
+
+    # Back out if track is already in playlist
+    existing_tracks = tidal_playlist.tracks()
+    if len([t for t in existing_tracks if t.id == track_id]) > 0:
+        logger.warning(f"Tidal playlist '{playlist_name}' already contains track '{track_name}'")
+        update.message.reply_text(f"That song is already in the Tidal playlist {playlist_name}!")
+        return
+
+    tidal_playlist.add([track_id])
+
+    logger.info(f"Successfully added '{track_name}' to Tidal playlist '{playlist_name}'")
+
+    return True
+
+
+# TODO test this
+def bot_added_to_chat(update, context):
+    chat_id = str(update.message.chat.id)
+    user_name = update.message.from_user["username"]
+    chat_name = update.message.chat.title if update.message.chat.title is not None else user_name
+    conn = sqlite3.connect("spotelegramify")
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT OR REPLACE INTO chats (chat_id)
+        VALUES (?)
+        """,
+        (chat_id,),
+    )
+    conn.commit()
+    conn.close()
+    logger.info(f"Initialisted DB for chat {chat_name}")
 
 
 def main():
@@ -305,7 +499,9 @@ def main():
     dp = updater.dispatcher
 
     # Set up handlers
-    dp.add_handler(CommandHandler("set_playlist", set_chat_playlist))
+    dp.add_handler(CommandHandler("init", bot_added_to_chat))
+    dp.add_handler(CommandHandler("set_spotify_playlist", set_chat_spotify_playlist))
+    dp.add_handler(CommandHandler("set_tidal_playlist", set_chat_tidal_playlist))
     dp.add_handler(CommandHandler("help", help))
     dp.add_handler(MessageHandler(Filters.all, parse_track_links))
     dp.add_error_handler(error)
