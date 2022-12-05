@@ -8,7 +8,7 @@
 
 </div>
 
-A telegram bot that grabs music links from chats and adds them to a playlist
+A telegram bot that grabs music links from chats and adds them to Spotify and/or Tidal playlists
 
 **Please note that the spotelegramify_bot account on Telegram is associated with my credentials, and will not work for anyone else.**
 **You can host your own instance and create a separate Telegram bot for it.**
@@ -44,6 +44,8 @@ The following environmental variables must be set:
 | `SPOTIFY_REFRESH_TOKEN` | Spotify refresh token for the admin user, see [here](https://dev.to/sabareh/how-to-get-the-spotify-refresh-token-176) for a guide |
 | `SPOTELEGRAMIFY_TELEGRAM_TOKEN` | Token for the Telegram bot running this application |
 | `SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID` | Telegram user ID of the admin user - determines who can set playlist ID in chat |
+| `TIDAL_ACCESS_TOKEN` | Tidal access token for the admin user, you can get this from the session object by logging in with the tidalapi python library |
+| `TIDAL_REFRESH_TOKEN` | Tidal refresh token for the admin user, you can get this from the session object by logging in with the tidalapi python library |
 
 ### Running
 
@@ -53,3 +55,5 @@ You can run this server in the background using as follows:
 chmod +x ./run-server.sh
 ./run-server.sh
 ```
+
+Not that `run-server` will install requirements.txt to your global python environment.
