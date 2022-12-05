@@ -392,9 +392,9 @@ def parse_track_links(update: Update, _):
         chat_tidal_playlist_id = get_spotify_playlist_id(update.message.chat.id)
         if chat_tidal_playlist_id is None:
             logger.info(f"No Spotify playlist id set, cannot add {track_name} to Spotify playlist")
-            return
+            continue
 
-        added_to_any = added_to_any or add_track_to_spotify_playlist(update, chat_tidal_playlist_id, track_name, track)
+        added_to_any = add_track_to_spotify_playlist(update, chat_tidal_playlist_id, track_name, track) or added_to_any
 
     for track in all_tidal_tracks:
         if track is None:
@@ -405,9 +405,9 @@ def parse_track_links(update: Update, _):
         chat_tidal_playlist_id = get_tidal_playlist_id(update.message.chat.id)
         if chat_tidal_playlist_id is None:
             logger.info(f"No Tidal playlist id set, cannot add {track_name} to Tidal playlist")
-            return
+            continue
 
-        added_to_any = added_to_any or add_track_to_tidal_playlist(update, chat_tidal_playlist_id, track_name, track)
+        added_to_any = add_track_to_tidal_playlist(update, chat_tidal_playlist_id, track_name, track) or added_to_any
 
     if not added_to_any:
         update.message.reply_text(f"No Spotify or Tidal playlist has been configured for this chat!")
@@ -435,7 +435,7 @@ def add_track_to_spotify_playlist(update, chat_playlist_id, track_name, track):
     if len([t for t in existing_tracks if t["track"]["id"] == track_id]) > 0:
         logger.info(f"Spotify playlist '{playlist_name}' already contains track '{track_name}'")
         update.message.reply_text(f"That song is already in the Spotify playlist {playlist_name}!")
-        return
+        return True
 
     sp.playlist_add_items(chat_playlist_id, [track_id])
 
@@ -462,7 +462,7 @@ def add_track_to_tidal_playlist(update, chat_playlist_id, track_name, track):
     if len([t for t in existing_tracks if t.id == track_id]) > 0:
         logger.warning(f"Tidal playlist '{playlist_name}' already contains track '{track_name}'")
         update.message.reply_text(f"That song is already in the Tidal playlist {playlist_name}!")
-        return
+        return True
 
     tidal_playlist.add([track_id])
 
