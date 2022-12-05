@@ -137,7 +137,7 @@ def set_chat_spotify_playlist(update: Update, context):
 
     logging.info(f"Setting Spotify playlist to {playlist_name} in chat {chat_name}")
     update.message.reply_text(
-        f"Songs in this chat will be added to Spotify playlist '{playlist_name}'.\nLink to playlist: {playlist_link}"
+        f"Songs in this chat will be added to Spotify playlist '{playlist_name}'.\nLink to playlist:\n{playlist_link}"
     )
 
     conn = sqlite3.connect("spotelegramify")
@@ -196,7 +196,7 @@ def set_chat_tidal_playlist(update: Update, context):
 
     logging.info(f"Setting Tidal playlist to {playlist_name} in chat {chat_name}")
     update.message.reply_text(
-        f"Songs in this chat will be added to Tidal playlist '{playlist_name}'.\nLink to playlist: {playlist_link}"
+        f"Songs in this chat will be added to Tidal playlist '{playlist_name}'.\nLink to playlist:\n{playlist_link}"
     )
 
     conn = sqlite3.connect("spotelegramify")
@@ -377,6 +377,9 @@ def parse_track_links(update: Update, _):
     all_tidal_tracks = message_tidal_tracks + [
         convert_spotify_track_to_tidal(track) for track in message_spotify_tracks
     ]
+
+    if len(all_spotify_tracks) < 1 and len(all_tidal_tracks) < 1:
+        return
 
     added_to_any = False
 
