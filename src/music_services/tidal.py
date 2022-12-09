@@ -4,7 +4,7 @@ from typing import Dict, List
 import tidalapi
 
 from music_services.music_service import MusicService
-from music_services.things import Track
+from music_services.things import Playlist, Track
 
 logger = logging.getLogger(__name__)
 
@@ -14,19 +14,10 @@ TIDAL_REFRESH_TOKEN = os.getenv("TIDAL_REFRESH_TOKEN")
 
 
 class TidalMusicService(MusicService):
-    @property
-    def name(self):
-        return "Tidal"
-
-    @property
-    def id(self):
-        return "tidal"
-
-    @property
-    def regex(self):
-        return r"tidal\.com/.*/track/(\d+)/?[^\?]*"
-
     def __init__(self):
+        self.name = "Tidal"
+        self.id = "tidal"
+        self.regex = r"tidal\.com/(?:.*/)?track/(\d+)/?[^\?]*"
         self.session = tidalapi.Session()
         super().__init__()
 
@@ -39,14 +30,12 @@ class TidalMusicService(MusicService):
         logger.info(f"Looking up playlist with ID '{playlist_id}' on {self.name}")
         playlist = None
         try:
-            playlist = tidalapi.playlist.Playlist(self.session, playlist_id)
+            playlist = tidalapi.playlist.UserPlaylist(self.session, playlist_id)
+            logger.info(f"Found playlist '{playlist.name}' on {self.name}")
+            return playlist
         except Exception:
             logger.info(f"No {self.name} playlist exists with ID {playlist_id}")
-            pass
-
-        playlist_name = playlist.name
-        logger.info(f"Found playlist '{playlist_name} on {self.name}")
-        return playlist
+            return None
 
     def lookup_service_track(self, track_id) -> Dict:
         logging.info(f"Searching for track with ID '{track_id}' on {self.name}")
@@ -59,15 +48,14 @@ class TidalMusicService(MusicService):
             logging.info(f"No track with ID {track_id} on {self.name}")
             return None
 
-    def search_track(self, track_name, artist_name):
-        query = f"{track_name} {artist_name}"
+    def search_track(self, track: Track):
+        query = f"{track.name} {track.artist_name}"
         results = self.session.search(query, models=[tidalapi.Track])
 
         tidal_track_result = results["top_hit"]
 
-        # Validate results
         if tidal_track_result is None:
-            logger.warning(f"Could not find track {track_name} - {artist_name} on {self.name}")
+            logger.warning(f"Could not find track {track.track_name} - {track.artist_name} on {self.name}")
             return None
 
         return tidal_track_result
@@ -78,8 +66,18 @@ class TidalMusicService(MusicService):
         tracks = playlist.tracks()
         return len([t for t in tracks if t.id == track_id]) > 0
 
-    def add_to_playlist(self, playlist: Dict, service_track: Dict):
+    def add_to_playlist(self, playlist, service_track):
+        logger.info(f"Adding track '{service_track.name}' to {self.name} playlist '{playlist.name}'")
         playlist.add([service_track.id])
 
-    def convert_tracks(self, tracks: List[Dict]) -> List[Track]:
+    def convert_tracks(self, tracks: List[any]) -> List[Track]:
+        logging.info(f"Converting {len(tracks)} tracks from {self.name}")
         return [Track(track.name, track.artists[0].name) for track in tracks]
+
+    def convert_playlist(self, playlist) -> List[Playlist]:
+        logging.info(f"Converting playlist {playlist.name} from {self.name}")
+        service_tracks = playlist.tracks()
+        tracks = self.convert_tracks(service_tracks)
+        playlist_link = f"https://tidal.com/playlist/{playlist.id}"
+        playlist = Playlist(playlist.name, tracks, playlist_link, playlist.id)
+        return playlist

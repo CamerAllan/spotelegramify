@@ -6,7 +6,7 @@ from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
 
 import urllib.parse
 from music_services.music_service import MusicService
-from music_services.things import Track
+from music_services.things import Playlist, Track
 
 logger = logging.getLogger(__name__)
 
@@ -16,19 +16,10 @@ SPOTIFY_REFRESH_TOKEN = os.getenv("SPOTIFY_REFRESH_TOKEN")
 
 
 class SpotifyMusicService(MusicService):
-    @property
-    def name(self):
-        return "Spotify"
-
-    @property
-    def id(self):
-        return "spotify"
-
-    @property
-    def regex(self):
-        return r"spotify\.com/track/([a-zA-Z0-9]{22})"
-
     def __init__(self):
+        self.name = "Spotify"
+        self.id = "spotify"
+        self.regex = r"spotify\.com/track/([a-zA-Z0-9]{22})"
         client_credentials_manager = SpotifyClientCredentials(
             client_id=SPOTELEGRAMIFY_CLIENT_ID, client_secret=SPOTELEGRAMIFY_CLIENT_SECRET
         )
@@ -56,35 +47,35 @@ class SpotifyMusicService(MusicService):
             pass
 
         playlist_name = playlist["name"]
-        logger.info(f"Found playlist '{playlist_name} on {self.name}")
+        logger.info(f"Found playlist '{playlist_name}' on {self.name}")
         return playlist
 
     def lookup_service_track(self, track_id) -> Dict:
         logging.info(f"Searching for track with ID '{track_id}' on {self.name}")
         try:
             track = self.session.track(track_id)
-            logging.info(f"Found track '{track.name}' on {self.name}")
+            track_name = track["name"]
+            logging.info(f"Found track '{track_name}' on {self.name}")
             return track
         except Exception as e:
             logging.info(e)
             logging.info(f"No track with ID {track_id} on {self.name}")
             return None
 
-    def search_track(self, track_name, artist_name):
-        query = urllib.parse.quote(f"track:{track_name} artist:{artist_name}".encode("utf8"))
+    def search_track(self, track: Track):
+        query = urllib.parse.quote(f"track:{track.name} artist:{track.artist_name}".encode("utf8"))
         results = self.session.search(query, type="track")
         track_results = results["tracks"]
 
         # Validate results
         if track_results is None:
-            logger.warning(f"Could not find track {track_name} - {artist_name} on {self.name}")
+            logger.warning(f"Could not find track {track.name} - {track.artist_name} on {self.name}")
             return None
 
         if track_results["total"] < 1:
-            logger.error(f"{self.name} returned empty tracks result for {track_name} - {artist_name}!")
+            logger.error(f"{self.name} returned empty tracks result for {track.name} - {track.artist_name}!")
             return None
 
-        # Return the top search result
         return track_results["items"][0]
 
     def playlist_contains_track(self, playlist_id: str, service_track: Dict):
@@ -94,11 +85,23 @@ class SpotifyMusicService(MusicService):
         return len([t for t in playlist_items if t["track"]["id"] == track_id]) > 0
 
     def add_to_playlist(self, playlist: Dict, service_track: Dict):
+        track_name = service_track["name"]
+        playlist_name = playlist["name"]
         track_id = service_track["id"]
         self.refresh_auth()
         if self.playlist_contains_track(playlist["id"], service_track):
+            logger.info(f"Track '{track_name}' is already in {self.name} playlist '{playlist_name}'")
             return
-        self.session.playlist_add_items(playlist_id, [track_id])
+        logger.info(f"Adding track '{track_name}' to {self.name} playlist '{playlist_name}'")
+        self.session.playlist_add_items(playlist["id"], [track_id])
 
     def convert_tracks(self, tracks: List[Dict]) -> List[Track]:
+        logging.info(f"Converting {len(tracks)} tracks from {self.name}")
         return [Track(track["name"], track["artists"][0]["name"]) for track in tracks]
+
+    def convert_playlist(self, playlist: List[any]) -> List[Playlist]:
+        playlist_name = playlist["name"]
+        logging.info(f"Converting playlist {playlist_name} from {self.name}")
+        service_tracks = [t["track"] for t in self.session.playlist_items(playlist["id"])["items"]]
+        tracks = self.convert_tracks(service_tracks)
+        return Playlist(playlist_name, tracks, playlist["external_urls"]["spotify"], playlist["id"])

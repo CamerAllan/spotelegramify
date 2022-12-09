@@ -6,11 +6,9 @@ class Track:
         self.name = name
         self.artist_name = artist_name
 
-    @property
     def name() -> str:
         pass
 
-    @property
     def artist_name() -> str:
         pass
 
@@ -22,18 +20,14 @@ class Playlist:
         self.link = link
         self.id = id
 
-    @property
     def name() -> str:
         pass
 
-    @property
-    def tracks() -> List[str]:
+    def tracks() -> List[Track]:
         pass
 
-    @property
     def link() -> str:
         pass
 
-    @property
     def id() -> str:
         pass

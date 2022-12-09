@@ -16,7 +16,7 @@ import sys
 
 from telegram import Update
 from telegram.ext import Filters, MessageHandler, CommandHandler, Updater
-from music_services.music_service import MusicService, get_all_music_services, get_music_service_by_name
+from music_services.music_service import MusicService, get_all_music_services, get_music_service_by_id
 from music_services.things import Playlist, Track
 from music_services.spotify import SpotifyMusicService
 from music_services.tidal import TidalMusicService
@@ -74,26 +74,26 @@ def set_chat_playlist_guard(update: Update, context):
     music_service_id = context.args[0]
     playlist_id = context.args[1]
 
-    service = get_music_service_by_name(music_service_id)
+    service = get_music_service_by_id(available_services, music_service_id)
 
     if service is None:
         all_service_ids = [s.id for s in available_services]
         update.message.reply_text(f"Unknown music service '{music_service_id}'")
         update.message.reply_text(f"Try one of these: '{all_service_ids}'")
+        return None
 
-    service.lookup_playlist()
-    service_playlist = service.lookup_playlist(playlist_id)
+    service_playlist = service.lookup_service_playlist(playlist_id)
     if service_playlist is None:
         logger.info(f"Playlist ID '{playlist_id}' is not valid for {service.name}.")
         update.message.reply_text(f"Playlist ID '{playlist_id}' is not valid for {service.name}!")
         return
 
-    playlist = service.convert_playlist(playlist)
+    playlist = service.convert_playlist(service_playlist)
 
-    set_chat_playlist(service, playlist_id)
+    set_chat_playlist(service, playlist, chat_id)
 
     update.message.reply_text(
-        f"Songs in this chat will be added to Spotify playlist '{playlist.name}'.\nLink to playlist:\n{playlist_link}"
+        f"Songs in this chat will be added to {service.name} playlist '{playlist.name}'.\nLink to playlist:\n{playlist.link}"
     )
 
 
@@ -112,18 +112,18 @@ def set_chat_playlist(service: MusicService, playlist: Playlist, chat_id) -> boo
     conn = sqlite3.connect("spotelegramify")
     cursor = conn.cursor()
     cursor.execute(
-        """
+        f"""
         UPDATE chats 
-        SET ?_playlist_id = ?
+        SET {service.id}_playlist_id = ?
         WHERE chat_id = ?
         """,
-        (service.id, playlist.id, chat_id),
+        (playlist.id, chat_id),
     )
     conn.commit()
     conn.close()
 
 
-def get_service_playlist_id(service: MusicService, chat_id):
+def get_chat_playlist_id(service: MusicService, chat_id):
     """
     Get the stored playlist associated with the given chat.
     """
@@ -131,12 +131,9 @@ def get_service_playlist_id(service: MusicService, chat_id):
     cursor = conn.cursor()
     cursor.execute(
         f"""
-        SELECT ?_playlist_id FROM chats WHERE chat_id = ?
+        SELECT {service.id}_playlist_id FROM chats WHERE chat_id = ?
         """,
-        (
-            service.id,
-            chat_id,
-        ),
+        (chat_id,),
     )
 
     result = cursor.fetchone()
@@ -155,32 +152,35 @@ def parse_track_links(update: Update, _):
 
     text = update.message.text
     chat_id = str(update.message.chat.id)
+    # TODO pull this out
+    user_name = update.message.from_user["username"]
+    chat_name = update.message.chat.title if update.message.chat.title is not None else user_name
 
     tracks: List[Track] = []
     for service in available_services:
         track_ids = service.find_track_ids(text)
-        service_tracks = [service.lookup_service_track(track_id) for track_id in track_ids]
-        tracks += service.convert_tracks(service_tracks)
+        if len(track_ids) > 0:
+            service_tracks = [service.lookup_service_track(track_id) for track_id in track_ids]
+            tracks += service.convert_tracks(service_tracks)
 
     if len(tracks) < 1:
+        logger.debug("No tracks in message")
         return
 
-    # added_to_any = False
-
     for service in available_services:
-        playlist_id = get_service_playlist_id(service, chat_id)
+        playlist_id = get_chat_playlist_id(service, chat_id)
+        if playlist_id is None:
+            logging.info(f"{service.name} playlist not configured for chat {chat_name}")
+            continue
         service_playlist = service.lookup_service_playlist(playlist_id)
 
         for track in tracks:
             service_track = service.search_track(track)
+            if service_track is None:
+                logger.info(f"{service.name} returned no results for track '{track.name - track.artist_name}'")
             service.add_to_playlist(service_playlist, service_track)
 
-    # TODO
-    # if not added_to_any:
-    #     update.message.reply_text(f"No Spotify or Tidal playlist has been configured for this chat!")
-    #     update.message.reply_text(f"You can set this up by running one of the following:")
-    #     update.message.reply_text(f"/set_spotify_playlist <spotify-playlist-id>")
-    #     update.message.reply_text(f"/set_tidal_playlist <tidal-playlist-id>")
+    logger.info(f"Processed {len(tracks)} track")
 
 
 def error(update, context):

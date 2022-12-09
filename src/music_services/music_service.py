@@ -3,7 +3,7 @@ import re
 from abc import ABC, abstractmethod, abstractproperty
 from typing import Dict, List
 
-from .things import Track
+from .things import Playlist, Track
 
 logger = logging.getLogger(__name__)
 
@@ -15,15 +15,12 @@ class MusicService(ABC):
     def find_track_ids(self, message) -> List:
         return re.findall(self.regex, message)
 
-    @abstractproperty
     def name(self) -> str:
         pass
 
-    @abstractproperty
     def id(self) -> str:
         pass
 
-    @abstractproperty
     def regex(self):
         pass
 
@@ -45,6 +42,10 @@ class MusicService(ABC):
         pass
 
     @abstractmethod
+    def convert_playlist(self, playlist: List[any]) -> List[Playlist]:
+        pass
+
+    @abstractmethod
     def add_to_playlist(self, playlist: Dict, service_track: Dict):
         pass
 
@@ -57,11 +58,11 @@ class MusicService(ABC):
         pass
 
 
-def get_music_service_by_name(services: List[MusicService], name: str):
+def get_music_service_by_id(services: List[MusicService], id: str) -> MusicService:
 
-    matching_services = [s for s in services if s.name.lower() == name]
-    if len(matching_services < 1):
-        logger.info(f"Invalid service {name}.")
+    matching_services = [s for s in services if s.id == id.lower()]
+    if len(matching_services) < 1:
+        logger.info(f"Invalid service {id}.")
         return None
 
     return matching_services[0]
