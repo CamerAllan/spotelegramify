@@ -277,7 +277,7 @@ def find_tidal_track_ids(message):
     That's ok.
     """
     # Track id is alphanumeric 22 chars long
-    return re.findall(r"tidal\.com/.*/track/(\d+)/?[^\?]*", message)
+    return re.findall(r"tidal\.com/(?:.*/)?track/(\d+)/?[^\?]*", message)
 
 
 def spotify_track_id_lookup(track_id):
