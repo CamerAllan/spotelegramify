@@ -1,11 +1,12 @@
 import logging
 import os
-from typing import Dict
+from typing import Dict, List
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
 
 import urllib.parse
 from music_services.music_service import MusicService
+from music_services.things import Track
 
 logger = logging.getLogger(__name__)
 
@@ -15,10 +16,19 @@ SPOTIFY_REFRESH_TOKEN = os.getenv("SPOTIFY_REFRESH_TOKEN")
 
 
 class SpotifyMusicService(MusicService):
+    @property
+    def name(self):
+        return "Spotify"
+
+    @property
+    def id(self):
+        return "spotify"
+
+    @property
+    def regex(self):
+        return r"spotify\.com/track/([a-zA-Z0-9]{22})"
+
     def __init__(self):
-        self.name = "Spotify"
-        self.id = "spotify"
-        self.regex = r"spotify\.com/track/([a-zA-Z0-9]{22})"
         client_credentials_manager = SpotifyClientCredentials(
             client_id=SPOTELEGRAMIFY_CLIENT_ID, client_secret=SPOTELEGRAMIFY_CLIENT_SECRET
         )
@@ -37,6 +47,7 @@ class SpotifyMusicService(MusicService):
         logger.info(f"Refreshed {self.name} access token")
 
     def lookup_service_playlist(self, playlist_id) -> Dict:
+        logger.info(f"Looking up playlist with ID '{playlist_id}' on {self.name}")
         playlist = None
         try:
             playlist = self.session.playlist(playlist_id)
@@ -44,10 +55,20 @@ class SpotifyMusicService(MusicService):
             logger.info(f"No {self.name} playlist exists with ID {playlist_id}")
             pass
 
+        playlist_name = playlist["name"]
+        logger.info(f"Found playlist '{playlist_name} on {self.name}")
         return playlist
 
     def lookup_service_track(self, track_id) -> Dict:
-        return self.session.track(track_id)
+        logging.info(f"Searching for track with ID '{track_id}' on {self.name}")
+        try:
+            track = self.session.track(track_id)
+            logging.info(f"Found track '{track.name}' on {self.name}")
+            return track
+        except Exception as e:
+            logging.info(e)
+            logging.info(f"No track with ID {track_id} on {self.name}")
+            return None
 
     def search_track(self, track_name, artist_name):
         query = urllib.parse.quote(f"track:{track_name} artist:{artist_name}".encode("utf8"))
@@ -78,3 +99,6 @@ class SpotifyMusicService(MusicService):
         if self.playlist_contains_track(playlist["id"], service_track):
             return
         self.session.playlist_add_items(playlist_id, [track_id])
+
+    def convert_tracks(self, tracks: List[Dict]) -> List[Track]:
+        return [Track(track["name"], track["artists"][0]["name"]) for track in tracks]

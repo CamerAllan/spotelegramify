@@ -3,13 +3,9 @@ import re
 from abc import ABC, abstractmethod, abstractproperty
 from typing import Dict, List
 
-from music_services.spotify import SpotifyMusicService
-from music_services.things import Playlist, Track
-from music_services.tidal import TidalMusicService
+from .things import Track
 
 logger = logging.getLogger(__name__)
-
-MUSIC_SERVICES = {"spotify": SpotifyMusicService, "tidal": TidalMusicService}
 
 
 class MusicService(ABC):
@@ -45,11 +41,7 @@ class MusicService(ABC):
 
     # Do this using track init
     @abstractmethod
-    def convert_tracks(self, track: List()) -> List(Track):
-        pass
-
-    @abstractmethod
-    def convert_playlist(self, track) -> Playlist:
+    def convert_tracks(self, track: List[Dict]) -> List[Track]:
         pass
 
     @abstractmethod
@@ -65,9 +57,15 @@ class MusicService(ABC):
         pass
 
 
-def get_available_music_services() -> List(MusicService):
-    return MUSIC_SERVICES.values()
+def get_music_service_by_name(services: List[MusicService], name: str):
+
+    matching_services = [s for s in services if s.name.lower() == name]
+    if len(matching_services < 1):
+        logger.info(f"Invalid service {name}.")
+        return None
+
+    return matching_services[0]
 
 
-def get_music_service_by_name(name):
-    return MUSIC_SERVICES.get(name, None)
+def get_all_music_services():
+    return MusicService.__subclasses__()

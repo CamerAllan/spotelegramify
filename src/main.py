@@ -16,8 +16,8 @@ import sys
 
 from telegram import Update
 from telegram.ext import Filters, MessageHandler, CommandHandler, Updater
-from music_services.music_service import MusicService, Playlist, get_available_music_services
-
+from music_services.music_service import MusicService, get_all_music_services, get_music_service_by_name
+from music_services.things import Playlist, Track
 from music_services.spotify import SpotifyMusicService
 from music_services.tidal import TidalMusicService
 
@@ -32,7 +32,7 @@ SPOTELEGRAMIFY_TELEGRAM_TOKEN = (
 )
 SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID = os.getenv("SPOTELEGRAMIFY_ADMIN_USER_TELEGRAM_ID")
 
-MUSIC_SERVICES: List(MusicService) = get_available_music_services()
+available_services: List[MusicService] = []
 
 
 def configure_db():
@@ -71,16 +71,15 @@ def set_chat_playlist_guard(update: Update, context):
         update.message.reply_text(f"Invalid use of set_playlist!")
         return
 
-    service_name = context.args[0]
+    music_service_id = context.args[0]
     playlist_id = context.args[1]
 
-    matching_services = [s for s in MUSIC_SERVICES if s.name.lower() == service_name]
-    if len(matching_services < 1):
-        logger.info(f"Invalid service {service_name}.")
-        update.message.reply_text(f"Unknown service '{service_name}'!")
-        return
+    service = get_music_service_by_name(music_service_id)
 
-    service = matching_services[0]
+    if service is None:
+        all_service_ids = [s.id for s in available_services]
+        update.message.reply_text(f"Unknown music service '{music_service_id}'")
+        update.message.reply_text(f"Try one of these: '{all_service_ids}'")
 
     service.lookup_playlist()
     service_playlist = service.lookup_playlist(playlist_id)
@@ -157,16 +156,18 @@ def parse_track_links(update: Update, _):
     text = update.message.text
     chat_id = str(update.message.chat.id)
 
-    tracks = []
-    for service in MUSIC_SERVICES:
-        tracks += service.convert_track(service.find_track_ids(text))
+    tracks: List[Track] = []
+    for service in available_services:
+        track_ids = service.find_track_ids(text)
+        service_tracks = [service.lookup_service_track(track_id) for track_id in track_ids]
+        tracks += service.convert_tracks(service_tracks)
 
     if len(tracks) < 1:
         return
 
     # added_to_any = False
 
-    for service in MUSIC_SERVICES:
+    for service in available_services:
         playlist_id = get_service_playlist_id(service, chat_id)
         service_playlist = service.lookup_service_playlist(playlist_id)
 
@@ -190,7 +191,7 @@ def error(update, context):
 
 
 # TODO test this
-def bot_added_to_chat(update, context):
+def initialise(update, context):
     chat_id = str(update.message.chat.id)
     user_name = update.message.from_user["username"]
     chat_name = update.message.chat.title if update.message.chat.title is not None else user_name
@@ -215,18 +216,33 @@ def main():
     # Configure the database
     configure_db()
 
-    # Set up the bot
-    updater = Updater(token=SPOTELEGRAMIFY_TELEGRAM_TOKEN, use_context=True)
-    dp = updater.dispatcher
+    for service in get_all_music_services():
+        available_service = None
 
-    # Set up handlers
-    dp.add_handler(CommandHandler("init", bot_added_to_chat))
-    dp.add_handler(CommandHandler("set_playlist", set_chat_spotify_playlist))
+        try:
+            available_service = service()
+        except Exception as e:
+            logger.warning(e)
+
+        if available_service is None:
+            logger.warning(f"Unable to initialise service {service.__name__}")
+
+        available_services.append(available_service)
+
+    if len(available_services) < 1:
+        logger.error(f"Unable to initialise any music services, shutting down")
+        logger.error(f"Fix environment settings and retry")
+        raise exit(1)
+
+    updater = Updater(token=SPOTELEGRAMIFY_TELEGRAM_TOKEN, use_context=True)
+
+    dp = updater.dispatcher
+    dp.add_handler(CommandHandler("init", initialise))
+    dp.add_handler(CommandHandler("set_playlist", set_chat_playlist_guard))
     dp.add_handler(CommandHandler("help", help))
     dp.add_handler(MessageHandler(Filters.all, parse_track_links))
     dp.add_error_handler(error)
 
-    # Start the dang thing
     updater.start_polling()
     updater.idle()
 
