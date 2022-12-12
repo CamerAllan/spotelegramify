@@ -15,11 +15,17 @@ A telegram bot that grabs music links from chats and adds them to Spotify and/or
 
 ## Limitations
 
+### Single Tenancy
+
 It's difficult to have the user auth with a Telegram bot, which would be the preferred way to run an app like this.
 
 Instead, the app runs 'single tenant', so an instance must be running for each admin user.
 Only playlists owned by the admin user can be accessed by a given instance of this bot.
 This limitation in part stems from the fact that only the owner of a playlist may add tracks through the API, even on collaborative playlists. 
+
+### Special Character Search
+
+Due to a [long-standing issue](https://github.com/spotify/web-api/issues/140) with the Spotify API, Spotify may return whacky results when any special characters are included in the track or artist name.
 
 ## Instructions
 
