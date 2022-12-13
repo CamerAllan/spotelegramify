@@ -1,6 +1,7 @@
 import logging
 import os
 from typing import Dict, List
+
 import tidalapi
 
 from music_services.music_service import MusicService
@@ -49,6 +50,7 @@ class TidalMusicService(MusicService):
             return None
 
     def search_track(self, track: Track):
+        logger.info(f"Searching {self.name} for {track.name} - {track.artist_name}")
         query = f"{track.name} {track.artist_name}"
         results = self.session.search(query, models=[tidalapi.Track])
 

@@ -69,6 +69,7 @@ class SpotifyMusicService(MusicService):
         # Remove anything but alphanumeric and spaces, and lowercase the whole thing
         simplified_track_name = re.sub('[^\w\s]', '', track.name).lower()
         simplified_artist_name = re.sub('[^\w\s]', '', track.artist_name).lower()
+        logger.info(f"Searching {self.name} for {simplified_track_name} - {simplified_artist_name}")
         query = urllib.parse.quote(f"track:{simplified_track_name} artist:{simplified_artist_name}".encode("utf8"))
         results = self.session.search(query, type="track")
         track_results = results["tracks"]
