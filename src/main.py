@@ -8,17 +8,19 @@ Press Ctrl-C on the command line or send a signal to the process to stop the bot
 
 import logging
 import os
-import sqlite3
 import re
-from typing import List
-import urllib.parse
+import sqlite3
 import sys
+import urllib.parse
+from typing import List
 
 from telegram import Update
-from telegram.ext import Filters, MessageHandler, CommandHandler, Updater
-from music_services.music_service import MusicService, get_all_music_services, get_music_service_by_id
-from music_services.things import Playlist, Track
+from telegram.ext import CommandHandler, Filters, MessageHandler, Updater
+
+from music_services.music_service import (MusicService, get_all_music_services,
+                                          get_music_service_by_id)
 from music_services.spotify import SpotifyMusicService
+from music_services.things import Playlist, Track
 from music_services.tidal import TidalMusicService
 
 # Enable logging
@@ -177,7 +179,8 @@ def parse_track_links(update: Update, _):
         for track in tracks:
             service_track = service.search_track(track)
             if service_track is None:
-                logger.info(f"{service.name} returned no results for track '{track.name - track.artist_name}'")
+                logger.info(f"{service.name} returned no results for track '{track.name} - {track.artist_name}'")
+                continue
             service.add_to_playlist(service_playlist, service_track)
 
     logger.info(f"Processed {len(tracks)} track")
