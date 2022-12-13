@@ -1,10 +1,12 @@
 import logging
 import os
+import re
+import urllib.parse
 from typing import Dict, List
+
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
 
-import urllib.parse
 from music_services.music_service import MusicService
 from music_services.things import Playlist, Track
 
@@ -63,7 +65,11 @@ class SpotifyMusicService(MusicService):
             return None
 
     def search_track(self, track: Track):
-        query = urllib.parse.quote(f"track:{track.name} artist:{track.artist_name}".encode("utf8"))
+        # Spotify search API returns garbage if you include special chars
+        # Remove anything but alphanumeric and spaces, and lowercase the whole thing
+        simplified_track_name = re.sub('[^\w\s]', '', track.name).lower()
+        simplified_artist_name = re.sub('[^\w\s]', '', track.artist_name).lower()
+        query = urllib.parse.quote(f"track:{simplified_track_name} artist:{simplified_artist_name}".encode("utf8"))
         results = self.session.search(query, type="track")
         track_results = results["tracks"]
 
