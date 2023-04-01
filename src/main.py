@@ -16,9 +16,10 @@ from typing import List
 
 from telegram import Update
 from telegram.ext import CommandHandler, Filters, MessageHandler, Updater
+from music_services.music_service import MusicService, get_all_music_services, get_music_service_by_id
+from music_services.things import Playlist, Track
 
-from music_services.music_service import (MusicService, get_all_music_services,
-                                          get_music_service_by_id)
+# Import these so that subclasses call works
 from music_services.spotify import SpotifyMusicService
 from music_services.things import Playlist, Track
 from music_services.tidal import TidalMusicService
@@ -28,7 +29,6 @@ logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # Get configuration from environment
-# TODO Sort this bollocks out
 SPOTELEGRAMIFY_TELEGRAM_TOKEN = (
     os.getenv("SPOTELEGRAMIFY_KEY") if sys.argv[1] != "test" else os.getenv("SPOTELEGRAMIFY_TEST_KEY")
 )

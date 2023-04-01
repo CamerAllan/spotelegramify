@@ -1,6 +1,6 @@
 import logging
 import re
-from abc import ABC, abstractmethod, abstractproperty
+from abc import ABC, abstractmethod
 from typing import Dict, List
 
 from .things import Playlist, Track
@@ -38,7 +38,7 @@ class MusicService(ABC):
 
     # Do this using track init
     @abstractmethod
-    def convert_tracks(self, track: List[Dict]) -> List[Track]:
+    def convert_tracks(self, track: List[any]) -> List[Track]:
         pass
 
     @abstractmethod
@@ -46,7 +46,7 @@ class MusicService(ABC):
         pass
 
     @abstractmethod
-    def add_to_playlist(self, playlist: Dict, service_track: Dict):
+    def add_to_playlist(self, playlist, service_track):
         pass
 
     @abstractmethod
@@ -54,7 +54,7 @@ class MusicService(ABC):
         pass
 
     @abstractmethod
-    def playlist_contains_track(self, playlist_id: str, service_track: Dict):
+    def playlist_contains_track(self, playlist_id: str, service_track):
         pass
 
 
