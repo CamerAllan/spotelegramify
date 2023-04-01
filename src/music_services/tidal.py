@@ -40,10 +40,12 @@ class TidalMusicService(MusicService):
             return None
 
     def lookup_service_album(self, album_id: str) -> Dict:
-        return {}
+        logging.warn(f"Album support currently not available for {self.name}")
+        return None
 
     def get_service_track_from_album(self, service_album: Dict) -> Dict:
-        return {}
+        logging.warn(f"Album support currently not available for {self.name}")
+        return None
 
     def lookup_service_track(self, track_id) -> Dict:
         logging.info(f"Searching for track with ID '{track_id}' on {self.name}")

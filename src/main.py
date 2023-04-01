@@ -172,6 +172,9 @@ def parse_track_links(update: Update, _):
             service_albums = [service.lookup_service_album(album_id) for album_id in album_ids]
             service_tracks += [service.get_service_track_from_album(service_album) for service_album in service_albums]
 
+        # Fitler out any None entries due to error
+        service_tracks = [st for st in service_tracks if st]
+
         tracks += service.convert_tracks(service_tracks)
 
     if len(tracks) < 1:
