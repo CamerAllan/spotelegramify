@@ -154,16 +154,25 @@ def parse_track_links(update: Update, _):
 
     text = update.message.text
     chat_id = str(update.message.chat.id)
-    # TODO pull this out
     user_name = update.message.from_user["username"]
     chat_name = update.message.chat.title if update.message.chat.title is not None else user_name
 
     tracks: List[Track] = []
     for service in available_services:
         track_ids = service.find_track_ids(text)
+        album_ids = service.find_album_ids(text)
+        service_tracks = []
+
+        # Scrape track ids and add these tracks
         if len(track_ids) > 0:
-            service_tracks = [service.lookup_service_track(track_id) for track_id in track_ids]
-            tracks += service.convert_tracks(service_tracks)
+            service_tracks += [service.lookup_service_track(track_id) for track_id in track_ids]
+
+        # Scrape album ids and add a single track from these albums
+        if len(album_ids) > 0:
+            service_albums = [service.lookup_service_album(album_id) for album_id in album_ids]
+            service_tracks += [service.get_service_track_from_album(service_album) for service_album in service_albums]
+
+        tracks += service.convert_tracks(service_tracks)
 
     if len(tracks) < 1:
         logger.debug("No tracks in message")
@@ -229,8 +238,8 @@ def main():
 
         if available_service is None:
             logger.warning(f"Unable to initialise service {service.__name__}")
-
-        available_services.append(available_service)
+        else:
+            available_services.append(available_service)
 
     if len(available_services) < 1:
         logger.error(f"Unable to initialise any music services, shutting down")

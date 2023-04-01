@@ -12,8 +12,11 @@ class MusicService(ABC):
     def __init__(self):
         self.refresh_auth()
 
-    def find_track_ids(self, message) -> List:
-        return re.findall(self.regex, message)
+    def find_album_ids(self, message: str) -> List:
+        return re.findall(self.album_regex, message)
+
+    def find_track_ids(self, message: str) -> List:
+        return re.findall(self.track_regex, message)
 
     def name(self) -> str:
         pass
@@ -21,7 +24,10 @@ class MusicService(ABC):
     def id(self) -> str:
         pass
 
-    def regex(self):
+    def album_regex(self):
+        pass
+
+    def track_regex(self):
         pass
 
     @abstractmethod
@@ -29,11 +35,19 @@ class MusicService(ABC):
         pass
 
     @abstractmethod
-    def lookup_service_track(self, track_id) -> Dict:
+    def get_service_track_from_album(self, service_album: Dict) -> Dict:
         pass
 
     @abstractmethod
-    def lookup_service_playlist(self, playlist_id) -> Dict:
+    def lookup_service_album(self, album_id: str) -> Dict:
+        pass
+
+    @abstractmethod
+    def lookup_service_track(self, track_id: str) -> Dict:
+        pass
+
+    @abstractmethod
+    def lookup_service_playlist(self, playlist_id: str) -> Dict:
         pass
 
     # Do this using track init

@@ -21,7 +21,8 @@ class SpotifyMusicService(MusicService):
     def __init__(self):
         self.name = "Spotify"
         self.id = "spotify"
-        self.regex = r"spotify\.com/track/([a-zA-Z0-9]{22})"
+        self.track_regex = r"spotify\.com/track/([a-zA-Z0-9]{22})"
+        self.album_regex = r"spotify\.com/album/([a-zA-Z0-9]{22})"
         client_credentials_manager = SpotifyClientCredentials(
             client_id=SPOTELEGRAMIFY_CLIENT_ID, client_secret=SPOTELEGRAMIFY_CLIENT_SECRET
         )
@@ -51,6 +52,36 @@ class SpotifyMusicService(MusicService):
         playlist_name = playlist["name"]
         logger.info(f"Found playlist '{playlist_name}' on {self.name}")
         return playlist
+
+    def lookup_service_album(self, album_id) -> Dict:
+        logging.info(f"Searching for album with ID '{album_id}' on {self.name}")
+        try:
+            album = self.session.album(album_id)
+            album_name = album["name"]
+            logging.info(f"Found album '{album_name}' on {self.name}")
+            return album
+        except Exception as e:
+            logging.info(e)
+            logging.info(f"No album with ID {album_id} on {self.name}")
+            return None
+
+    def get_service_track_from_album(self, service_album: Dict) -> Dict:
+        album_name = service_album["name"]
+        logging.info(f"Looking for top track from album '{album_name}' on {self.name}")
+        album_tracks = service_album["tracks"]["items"]
+        if len(album_tracks) > 0:
+            service_track_id = album_tracks[0]["id"]
+            service_track_name = album_tracks[0]["name"]
+            logging.info(
+                f"Found track {service_track_name} for album {album_name}, fetching full track details on {self.name}"
+            )
+            service_track = self.lookup_service_track(service_track_id)
+
+            logging.info(f"Returning track {service_track_name} for album '{album_name}' on {self.name}")
+            return service_track
+        else:
+            logging.warning(f"No tracks in album '{album_name}' on {self.name}")
+            return None
 
     def lookup_service_track(self, track_id) -> Dict:
         logging.info(f"Searching for track with ID '{track_id}' on {self.name}")

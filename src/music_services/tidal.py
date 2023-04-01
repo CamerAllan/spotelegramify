@@ -18,7 +18,8 @@ class TidalMusicService(MusicService):
     def __init__(self):
         self.name = "Tidal"
         self.id = "tidal"
-        self.regex = r"tidal\.com/(?:.*/)?track/(\d+)/?[^\?]*"
+        self.album_regex = r"tidal\.com/(?:.*/)?album/(\d+)/?[^\?]*"
+        self.track_regex = r"tidal\.com/(?:.*/)?track/(\d+)/?[^\?]*"
         self.session = tidalapi.Session()
         super().__init__()
 
@@ -37,6 +38,12 @@ class TidalMusicService(MusicService):
         except Exception:
             logger.info(f"No {self.name} playlist exists with ID {playlist_id}")
             return None
+
+    def lookup_service_album(self, album_id: str) -> Dict:
+        return {}
+
+    def get_service_track_from_album(self, service_album: Dict) -> Dict:
+        return {}
 
     def lookup_service_track(self, track_id) -> Dict:
         logging.info(f"Searching for track with ID '{track_id}' on {self.name}")
