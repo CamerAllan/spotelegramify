@@ -98,8 +98,8 @@ class SpotifyMusicService(MusicService):
     def search_track(self, track: Track):
         # Spotify search API returns garbage if you include special chars
         # Remove anything but alphanumeric and spaces, and lowercase the whole thing
-        simplified_track_name = re.sub('[^\w\s]', '', track.name).lower()
-        simplified_artist_name = re.sub('[^\w\s]', '', track.artist_name).lower()
+        simplified_track_name = re.sub("[^\w\s]", "", track.name).lower()
+        simplified_artist_name = re.sub("[^\w\s]", "", track.artist_name).lower()
         logger.info(f"Searching {self.name} for {simplified_track_name} - {simplified_artist_name}")
         query = f"track:{simplified_track_name} artist:{simplified_artist_name}"
         results = self.session.search(query, type="track")
